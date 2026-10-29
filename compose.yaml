@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: privacy
+      POSTGRES_USER: privacy
+      POSTGRES_PASSWORD: CHANGE_ME
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U privacy -d privacy"], interval: 5s, timeout: 5s, retries: 10}
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 5s, retries: 10}
+  api:
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://privacy:CHANGE_ME@postgres:5432/privacy
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_ROOT: /srv/private/documents
+    volumes: ["private_documents:/srv/private/documents"]
+    ports: ["8000:8000"]
+    depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+  worker:
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: [.env]
+    environment: {REDIS_URL: redis://redis:6379/0}
+    volumes: ["private_documents:/srv/private/documents"]
+    depends_on: {redis: {condition: service_healthy}}
+    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "--loglevel=INFO"]
+  web:
+    build: {context: ., dockerfile: infra/docker/web.Dockerfile}
+    ports: ["5173:80"]
+    depends_on: [api]
+volumes:
+  pgdata:
+  private_documents:
