@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Privacy OCR API",
+    title="NSFpa API — Not Safe for Public Administration",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -55,7 +55,7 @@ async def security_headers(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def safe_exception_handler(request: Request, exc: Exception):
-    logging.getLogger("privacy-ocr").exception("request failed", exc_info=exc)
+    logging.getLogger("nsfpa").exception("request failed", exc_info=exc)
     return JSONResponse(
         status_code=500,
         content={"code": "INTERNAL_ERROR", "message": "Internal server error", "details": {}},

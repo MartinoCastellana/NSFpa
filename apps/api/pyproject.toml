@@ -1,7 +1,7 @@
 [project]
-name = "privacy-ocr-api"
+name = "nsfpa-api"
 version = "0.1.0"
-description = "Local OCR and fail-closed pseudonymization API"
+description = "NSFpa — Not Safe for Public Administration pseudonymization API"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",

@@ -56,3 +56,7 @@ def test_upload_to_safe_outbound_flow_and_tenant_isolation():
         sent = client.post(f"/api/v1/requests/{request_id}/send", headers=headers)
         assert sent.status_code == 200
         assert "Marta Verdi" not in sent.text
+        calls = client.get("/api/v1/api-calls", headers=headers)
+        assert calls.status_code == 200
+        assert any(call["request_id"] == request_id for call in calls.json())
+        assert all("Marta Verdi" not in str(call) for call in calls.json())

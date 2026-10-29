@@ -4,6 +4,8 @@ export type RequestItem = { id: string; scope_id: string; status: string; policy
 export type DocumentItem = { id: string; request_id: string; original_name: string; mime_type: string; size_bytes: number; pages: number; status: string; created_at: string };
 export type Evidence = { id: string; page_id: string; start_offset: number; end_offset: number; bbox: Record<string, unknown>; entity_type: string; semantic_role: string | null; score: number; detector: string; reason_codes: string[]; review_status: string; original_text?: string | null };
 export type SafeText = { request_id: string; revision: number; text: string; validation_report: Record<string, unknown>; approved: boolean };
+export type ProviderSettings = { endpoint: string; model: string; mode: "mock" | "live"; configured: boolean; api_key_masked: string | null };
+export type ApiCall = { id: string; request_id: string; document_id: string | null; file_name?: string | null; revision: number; text: string; model: string; status: string; usage: Record<string, unknown>; response_id: string | null; error_code: string | null; response?: Record<string, unknown> | null; response_status?: string | null; created_at?: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
@@ -27,4 +29,8 @@ export const api = {
   safeText: (requestId: string) => request<SafeText>(`/api/v1/requests/${requestId}/pseudonymized-text`),
   validate: (requestId: string) => request<Record<string, unknown>>(`/api/v1/requests/${requestId}/validate`, { method: "POST" }),
   send: (requestId: string) => request<Record<string, unknown>>(`/api/v1/requests/${requestId}/send`, { method: "POST" }),
+  requestApiCalls: (requestId: string) => request<ApiCall[]>(`/api/v1/requests/${requestId}/api-calls`),
+  apiCalls: () => request<ApiCall[]>("/api/v1/api-calls"),
+  providerSettings: () => request<ProviderSettings>("/api/v1/settings/provider"),
+  updateProviderSettings: (payload: { endpoint: string; model: string; mode: "mock" | "live"; api_key: string | null }) => request<ProviderSettings>("/api/v1/settings/provider", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
 };

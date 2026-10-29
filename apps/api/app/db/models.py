@@ -113,6 +113,17 @@ class ProcessingRequest(TimestampMixin, Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ProviderSetting(TimestampMixin, Base):
+    __tablename__ = "provider_settings"
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    endpoint: Mapped[str] = mapped_column(String(500), default="https://api.openai.com/v1")
+    encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str] = mapped_column(String(120), default="gpt-4o-mini")
+    mode: Mapped[str] = mapped_column(String(20), default="mock")
+
+
 class Document(TimestampMixin, Base):
     __tablename__ = "documents"
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -280,6 +291,9 @@ class ApiCall(TimestampMixin, Base):
     )
     request_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True
     )
     revision: Mapped[int] = mapped_column(Integer)
     outbound_text_snapshot: Mapped[str] = mapped_column(Text)

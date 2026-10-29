@@ -1,4 +1,4 @@
-"""Initial privacy OCR schema.
+"""Initial NSFpa schema.
 
 Revision ID: 0001_initial
 """

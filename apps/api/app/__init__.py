@@ -1,1 +1,1 @@
-"""Privacy OCR application."""
+"""NSFpa — Not Safe for Public Administration."""

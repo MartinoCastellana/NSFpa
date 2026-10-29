@@ -91,6 +91,21 @@ class RestoreOut(BaseModel):
     restored: dict[str, Any] | None = None
 
 
+class ProviderSettingsUpdate(BaseModel):
+    endpoint: str = Field(default="https://api.openai.com/v1", min_length=1, max_length=500)
+    model: str = Field(default="gpt-4o-mini", min_length=1, max_length=120)
+    mode: Literal["mock", "live"] = "mock"
+    api_key: str | None = Field(default=None, max_length=500)
+
+
+class ProviderSettingsOut(BaseModel):
+    endpoint: str
+    model: str
+    mode: str
+    configured: bool
+    api_key_masked: str | None
+
+
 class ErrorOut(BaseModel):
     code: str
     message: str

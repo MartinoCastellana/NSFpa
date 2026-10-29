@@ -3,6 +3,7 @@ import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -24,6 +25,7 @@ from app.db.models import (
     EntityOccurrence,
     OcrBlock,
     ProcessingRequest,
+    ProviderSetting,
     PseudonymizedText,
     PseudonymMapping,
     RequestStatus,
@@ -36,6 +38,8 @@ from app.schemas.api import (
     DocumentOut,
     EvidenceOut,
     EvidencePatch,
+    ProviderSettingsOut,
+    ProviderSettingsUpdate,
     RequestCreate,
     RequestOut,
     RestoreOut,
@@ -103,6 +107,100 @@ async def _audit(
             action=action,
             outcome=outcome,
         )
+    )
+
+
+def _masked_key(encrypted_key: str | None) -> str | None:
+    if not encrypted_key:
+        return None
+    return "••••••••" + cipher.decrypt(encrypted_key)[-4:]
+
+
+def _validate_provider_endpoint(endpoint: str) -> str:
+    parsed = urlparse(endpoint.rstrip("/"))
+    local_dev = settings.app_env == "development" and parsed.hostname in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }
+    if parsed.scheme != "https" and not local_dev:
+        raise HTTPException(422, "Provider endpoint must use HTTPS")
+    if not parsed.netloc:
+        raise HTTPException(422, "Provider endpoint is invalid")
+    return endpoint.rstrip("/")
+
+
+async def _provider_runtime(session: AsyncSession, tenant_id: UUID) -> tuple[str, str, str, str]:
+    provider = await session.get(ProviderSetting, tenant_id)
+    if not provider:
+        return (
+            settings.openai_base_url,
+            settings.openai_model,
+            settings.openai_mode,
+            settings.openai_api_key,
+        )
+    api_key = (
+        cipher.decrypt(provider.encrypted_api_key)
+        if provider.encrypted_api_key
+        else settings.openai_api_key
+    )
+    return provider.endpoint, provider.model, provider.mode, api_key
+
+
+@router.get("/settings/provider", response_model=ProviderSettingsOut)
+async def get_provider_settings(
+    session: AsyncSession = Depends(session_dep),
+    principal: Principal = Depends(get_principal),
+):
+    provider = await session.get(ProviderSetting, principal.tenant_id)
+    if provider:
+        return ProviderSettingsOut(
+            endpoint=provider.endpoint,
+            model=provider.model,
+            mode=provider.mode,
+            configured=bool(provider.encrypted_api_key),
+            api_key_masked=_masked_key(provider.encrypted_api_key),
+        )
+    return ProviderSettingsOut(
+        endpoint=settings.openai_base_url,
+        model=settings.openai_model,
+        mode=settings.openai_mode,
+        configured=bool(settings.openai_api_key),
+        api_key_masked=("••••••••" + settings.openai_api_key[-4:])
+        if settings.openai_api_key
+        else None,
+    )
+
+
+@router.put("/settings/provider", response_model=ProviderSettingsOut)
+async def update_provider_settings(
+    payload: ProviderSettingsUpdate,
+    session: AsyncSession = Depends(session_dep),
+    principal: Principal = Depends(get_principal),
+):
+    if "admin" not in principal.roles:
+        raise HTTPException(403, "Admin role required")
+    endpoint = _validate_provider_endpoint(payload.endpoint)
+    provider = await session.get(ProviderSetting, principal.tenant_id)
+    if not provider:
+        provider = ProviderSetting(tenant_id=principal.tenant_id)
+        session.add(provider)
+    provider.endpoint = endpoint
+    provider.model = payload.model
+    provider.mode = payload.mode
+    if payload.api_key:
+        provider.encrypted_api_key = cipher.encrypt(payload.api_key)
+    if payload.mode == "live" and not provider.encrypted_api_key and not settings.openai_api_key:
+        raise HTTPException(422, "A provider API key is required in live mode")
+    await _audit(session, principal, "provider_settings", principal.tenant_id, "update")
+    await session.commit()
+    await session.refresh(provider)
+    return ProviderSettingsOut(
+        endpoint=provider.endpoint,
+        model=provider.model,
+        mode=provider.mode,
+        configured=bool(provider.encrypted_api_key),
+        api_key_masked=_masked_key(provider.encrypted_api_key),
     )
 
 
@@ -781,23 +879,33 @@ async def send(
         ).all()
     )
     originals = [cipher.decrypt(item.encrypted_original) for item in evidences]
+    provider_endpoint, provider_model, provider_mode, provider_api_key = await _provider_runtime(
+        session, principal.tenant_id
+    )
     request.status = RequestStatus.SENDING
     await session.flush()
     started = time.perf_counter()
     api_call = ApiCall(
         tenant_id=principal.tenant_id,
         request_id=request.id,
+        document_id=safe_row.document_id,
         revision=safe_row.revision,
         outbound_text_snapshot=text,
         outbound_payload_snapshot={"input": text, "schema": SCHEMA},
-        model=settings.openai_model,
+        model=provider_model,
         schema_version="v1",
         status="SENDING",
     )
     session.add(api_call)
     await session.flush()
     try:
-        completion = SafeOpenAIClient(settings).complete(text, SCHEMA, originals)
+        completion = SafeOpenAIClient(
+            settings,
+            api_key=provider_api_key,
+            base_url=provider_endpoint,
+            model=provider_model,
+            mode=provider_mode,
+        ).complete(text, SCHEMA, originals)
         api_call.openai_response_id = completion.response_id
         api_call.token_usage = completion.usage
         api_call.latency_ms = completion.latency_ms
@@ -847,6 +955,8 @@ async def api_calls(
     return [
         {
             "id": str(row.id),
+            "request_id": str(row.request_id),
+            "document_id": str(row.document_id) if row.document_id else None,
             "revision": row.revision,
             "text": row.outbound_text_snapshot,
             "model": row.model,
@@ -857,6 +967,83 @@ async def api_calls(
         }
         for row in rows
     ]
+
+
+@router.get("/documents/{document_id}/api-calls")
+async def document_api_calls(
+    document_id: UUID,
+    session: AsyncSession = Depends(session_dep),
+    principal: Principal = Depends(get_principal),
+):
+    document = await _document(session, document_id, principal)
+    rows = list(
+        (
+            await session.scalars(
+                select(ApiCall)
+                .where(ApiCall.document_id == document.id, ApiCall.tenant_id == principal.tenant_id)
+                .order_by(ApiCall.created_at.desc())
+            )
+        ).all()
+    )
+    return [
+        {
+            "id": str(row.id),
+            "request_id": str(row.request_id),
+            "document_id": str(row.document_id) if row.document_id else None,
+            "revision": row.revision,
+            "text": row.outbound_text_snapshot,
+            "model": row.model,
+            "status": row.status,
+            "usage": row.token_usage,
+            "response_id": row.openai_response_id,
+            "error_code": row.error_code,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/api-calls")
+async def list_api_calls(
+    request_id: UUID | None = None,
+    document_id: UUID | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(session_dep),
+    principal: Principal = Depends(get_principal),
+):
+    limit = min(max(limit, 1), 200)
+    query = select(ApiCall).where(ApiCall.tenant_id == principal.tenant_id)
+    if request_id:
+        query = query.where(ApiCall.request_id == request_id)
+    if document_id:
+        query = query.where(ApiCall.document_id == document_id)
+    rows = list(
+        (await session.scalars(query.order_by(ApiCall.created_at.desc()).limit(limit))).all()
+    )
+    result = []
+    for row in rows:
+        response = await session.scalar(
+            select(ApiResponse).where(ApiResponse.api_call_id == row.id)
+        )
+        document = await session.get(Document, row.document_id) if row.document_id else None
+        result.append(
+            {
+                "id": str(row.id),
+                "request_id": str(row.request_id),
+                "document_id": str(row.document_id) if row.document_id else None,
+                "file_name": document.original_name if document else None,
+                "revision": row.revision,
+                "text": row.outbound_text_snapshot,
+                "model": row.model,
+                "status": row.status,
+                "usage": row.token_usage,
+                "response_id": row.openai_response_id,
+                "error_code": row.error_code,
+                "response": response.pseudonymized_json if response else None,
+                "response_status": response.validation_status if response else None,
+                "created_at": row.created_at,
+            }
+        )
+    return result
 
 
 @router.get("/api-calls/{api_call_id}/response")
