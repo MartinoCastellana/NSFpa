@@ -36,9 +36,24 @@ class SafeOpenAIClient:
             "bbox",
             "ocr_original",
         }
-        if any(key in payload for key in forbidden_keys):
+        keys: set[str] = set()
+
+        def collect(value: Any) -> None:
+            if isinstance(value, dict):
+                keys.update(str(key).casefold() for key in value)
+                for child in value.values():
+                    collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+
+        collect(payload)
+        if keys & forbidden_keys:
             raise ValueError("Outbound payload contains a forbidden non-text field")
-        if original_values and any(value and value in serialized for value in original_values):
+        lowered = serialized.casefold()
+        if original_values and any(
+            value and value.casefold() in lowered for value in original_values
+        ):
             raise ValueError("Outbound payload contains an original value")
         if not isinstance(payload.get("input"), str):
             raise ValueError("Outbound payload must contain text input")

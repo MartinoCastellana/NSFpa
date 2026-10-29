@@ -5,8 +5,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+*.egg-info/
 node_modules/
 dist/
+*.tsbuildinfo
 private_documents/
 .venv/
 data/

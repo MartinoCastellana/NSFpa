@@ -1,7 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -58,4 +59,18 @@ async def safe_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"code": "INTERNAL_ERROR", "message": "Internal server error", "details": {}},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    message = exc.detail if isinstance(exc.detail, str) else "Request rejected"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": f"HTTP_{exc.status_code}",
+            "message": message,
+            "correlation_id": str(uuid4()),
+            "details": {},
+        },
     )

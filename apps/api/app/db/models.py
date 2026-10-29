@@ -57,7 +57,9 @@ def uuid_pk() -> Mapped[uuid.UUID]:
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Tenant(TimestampMixin, Base):
@@ -69,7 +71,9 @@ class Tenant(TimestampMixin, Base):
 class User(TimestampMixin, Base):
     __tablename__ = "users"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
     subject: Mapped[str] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
@@ -82,17 +86,27 @@ class Role(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class ProcessingRequest(TimestampMixin, Base):
     __tablename__ = "processing_requests"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
-    scope_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), default=uuid.uuid4, unique=True, index=True)
-    status: Mapped[RequestStatus] = mapped_column(Enum(RequestStatus, native_enum=False), default=RequestStatus.CREATED, index=True)
+    scope_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), default=uuid.uuid4, unique=True, index=True
+    )
+    status: Mapped[RequestStatus] = mapped_column(
+        Enum(RequestStatus, native_enum=False), default=RequestStatus.CREATED, index=True
+    )
     policy_version: Mapped[str] = mapped_column(String(80), default="policy-v1")
     policy: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -102,8 +116,12 @@ class ProcessingRequest(TimestampMixin, Base):
 class Document(TimestampMixin, Base):
     __tablename__ = "documents"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
     original_name: Mapped[str] = mapped_column(String(255))
     mime_type: Mapped[str] = mapped_column(String(100))
     size_bytes: Mapped[int] = mapped_column(Integer)
@@ -117,8 +135,12 @@ class Document(TimestampMixin, Base):
 class DocumentPage(TimestampMixin, Base):
     __tablename__ = "document_pages"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
     page_index: Mapped[int] = mapped_column(Integer)
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
@@ -132,8 +154,12 @@ class DocumentPage(TimestampMixin, Base):
 class OcrBlock(TimestampMixin, Base):
     __tablename__ = "ocr_blocks"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_pages.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("document_pages.id", ondelete="CASCADE"), index=True
+    )
     reading_order: Mapped[int] = mapped_column(Integer)
     encrypted_text: Mapped[str] = mapped_column(Text)
     bbox: Mapped[dict[str, float]] = mapped_column(JSON)
@@ -145,8 +171,12 @@ class OcrBlock(TimestampMixin, Base):
 class EntityEvidence(TimestampMixin, Base):
     __tablename__ = "entity_evidence"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
     page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_pages.id"), index=True)
     block_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ocr_blocks.id"), nullable=True)
     start_offset: Mapped[int] = mapped_column(Integer)
@@ -158,7 +188,9 @@ class EntityEvidence(TimestampMixin, Base):
     score: Mapped[float] = mapped_column()
     entity_type: Mapped[str] = mapped_column(String(60), index=True)
     semantic_role: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    review_status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus, native_enum=False), default=ReviewStatus.PENDING, index=True)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus, native_enum=False), default=ReviewStatus.PENDING, index=True
+    )
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
 
@@ -166,22 +198,36 @@ class EntityEvidence(TimestampMixin, Base):
 class ResolvedEntity(TimestampMixin, Base):
     __tablename__ = "resolved_entities"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
-    entity_key: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), default=uuid.uuid4, unique=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
+    entity_key: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), default=uuid.uuid4, unique=True
+    )
     entity_type: Mapped[str] = mapped_column(String(60))
     semantic_role: Mapped[str | None] = mapped_column(String(80), nullable=True)
     confidence: Mapped[float] = mapped_column()
     provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    review_status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus, native_enum=False), default=ReviewStatus.PENDING)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus, native_enum=False), default=ReviewStatus.PENDING
+    )
 
 
 class EntityOccurrence(Base):
     __tablename__ = "entity_occurrences"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    resolved_entity_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resolved_entities.id", ondelete="CASCADE"), index=True)
-    evidence_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("entity_evidence.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    resolved_entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resolved_entities.id", ondelete="CASCADE"), index=True
+    )
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entity_evidence.id", ondelete="CASCADE"), index=True
+    )
     occurrence_order: Mapped[int] = mapped_column(Integer)
     dedup_status: Mapped[str] = mapped_column(String(40), default="resolved")
 
@@ -189,9 +235,15 @@ class EntityOccurrence(Base):
 class PseudonymMapping(TimestampMixin, Base):
     __tablename__ = "pseudonym_mappings"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
-    entity_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resolved_entities.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resolved_entities.id", ondelete="CASCADE"), index=True
+    )
     encrypted_original: Mapped[str] = mapped_column(Text)
     pseudonym: Mapped[str] = mapped_column(String(255))
     entity_type: Mapped[str] = mapped_column(String(60))
@@ -203,9 +255,15 @@ class PseudonymMapping(TimestampMixin, Base):
 class PseudonymizedText(TimestampMixin, Base):
     __tablename__ = "pseudonymized_texts"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
     revision: Mapped[int] = mapped_column(Integer)
     encrypted_text: Mapped[str] = mapped_column(Text)
     provenance_map: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
@@ -217,8 +275,12 @@ class PseudonymizedText(TimestampMixin, Base):
 class ApiCall(TimestampMixin, Base):
     __tablename__ = "api_calls"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("processing_requests.id", ondelete="CASCADE"), index=True
+    )
     revision: Mapped[int] = mapped_column(Integer)
     outbound_text_snapshot: Mapped[str] = mapped_column(Text)
     outbound_payload_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
@@ -235,8 +297,12 @@ class ApiCall(TimestampMixin, Base):
 class ApiResponse(Base):
     __tablename__ = "api_responses"
     id: Mapped[uuid.UUID] = uuid_pk()
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
-    api_call_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("api_calls.id", ondelete="CASCADE"), unique=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    api_call_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("api_calls.id", ondelete="CASCADE"), unique=True
+    )
     pseudonymized_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     restored_json_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     validation_status: Mapped[str] = mapped_column(String(40))
@@ -248,13 +314,19 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[uuid.UUID] = uuid_pk()
     actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
     resource_type: Mapped[str] = mapped_column(String(80))
     resource_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(String(100))
     outcome: Mapped[str] = mapped_column(String(40))
-    correlation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), default=uuid.uuid4, index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    correlation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), default=uuid.uuid4, index=True
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
 
 
 Index("ix_api_calls_request_created", ApiCall.request_id, ApiCall.created_at)

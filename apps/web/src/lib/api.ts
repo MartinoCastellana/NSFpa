@@ -16,6 +16,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   createRequest: () => request<RequestItem>("/api/v1/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policy: { categories: "italian-pii", manual_approval: true } }) }),
+  requests: () => request<RequestItem[]>("/api/v1/requests"),
   upload: (requestId: string, file: File) => { const form = new FormData(); form.append("file", file); return request<DocumentItem>(`/api/v1/requests/${requestId}/documents`, { method: "POST", body: form }); },
   documents: (requestId: string) => request<DocumentItem[]>(`/api/v1/requests/${requestId}/documents`),
   extract: (documentId: string) => request<DocumentItem>(`/api/v1/documents/${documentId}/extract`, { method: "POST" }),
