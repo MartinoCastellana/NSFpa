@@ -1,7 +1,10 @@
+import sys
 from uuid import uuid4
 
+from app.core.config import Settings
 from app.core.crypto import EnvelopeCipher
 from app.services.ner import detect_pii
+from app.services.ocr import MiniCPMOcrAdapter
 from app.services.pseudonymization import Pseudonymizer
 from app.services.restoration import restore_typed
 from app.services.validation import validate_safe_text
@@ -52,3 +55,23 @@ def test_validation_blocks_original_leakage_and_unapproved_text():
     )
     assert result.status == "BLOCKED"
     assert "original_value_residual" in result.report["issues"]
+
+
+def test_minicpm_adapter_consumes_local_json_runner(tmp_path):
+    runner = tmp_path / "runner.py"
+    runner.write_text(
+        "import json; print(json.dumps({'pages': [{'page_index': 0, 'width': 100, 'height': 200, 'text': 'safe OCR', 'words': [{'text': 'safe', 'confidence': 0.9, 'bbox': {'x': 1, 'y': 2, 'w': 3, 'h': 4}}], 'quality': 0.9}]}))",
+        encoding="utf-8",
+    )
+    source = tmp_path / "document.txt"
+    source.write_text("not sent", encoding="utf-8")
+    settings = Settings(
+        storage_root=tmp_path / "storage",
+        minicpm_ocr_command=f"{sys.executable} {runner}",
+        minicpm_ocr_timeout_seconds=5,
+    )
+
+    pages = MiniCPMOcrAdapter(settings).extract(source, "text/plain")
+
+    assert pages[0].text == "safe OCR"
+    assert pages[0].words[0].bbox["x"] == 1

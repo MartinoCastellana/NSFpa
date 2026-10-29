@@ -7,10 +7,20 @@ def test_upload_to_safe_outbound_flow_and_tenant_isolation():
     headers = {"X-Roles": "admin,reviewer", "X-Tenant-ID": "00000000-0000-0000-0000-000000000001"}
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/requests", json={"policy": {"manual_approval": True}}, headers=headers
+            "/api/v1/requests",
+            json={
+                "policy": {
+                    "title": "Domanda contributo",
+                    "task": "Riassumi la pratica",
+                    "fields": ["Nome", "Indirizzo"],
+                    "manual_approval": True,
+                }
+            },
+            headers=headers,
         )
         assert created.status_code == 201
         request_id = created.json()["id"]
+        assert created.json()["policy"]["fields"] == ["Nome", "Indirizzo"]
         forbidden = client.get(
             f"/api/v1/requests/{request_id}",
             headers={"X-Tenant-ID": "00000000-0000-0000-0000-000000000002"},
@@ -56,6 +66,13 @@ def test_upload_to_safe_outbound_flow_and_tenant_isolation():
         sent = client.post(f"/api/v1/requests/{request_id}/send", headers=headers)
         assert sent.status_code == 200
         assert "Marta Verdi" not in sent.text
+        assert sent.json()["response"]["richiedente"]["value"] != "Marta Verdi"
+        restored = client.post(
+            f"/api/v1/api-calls/{sent.json()['api_call_id']}/restore", headers=headers
+        )
+        assert restored.status_code == 200
+        assert restored.json()["status"] == "RESTORED"
+        assert restored.json()["restored"]["richiedente"]["value"] == "Marta Verdi"
         calls = client.get("/api/v1/api-calls", headers=headers)
         assert calls.status_code == 200
         assert any(call["request_id"] == request_id for call in calls.json())

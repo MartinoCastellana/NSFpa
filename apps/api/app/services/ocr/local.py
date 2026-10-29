@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -137,27 +138,68 @@ class MiniCPMOcrAdapter(OcrAdapter):
     name = "minicpm-ocr"
     version = "1"
 
-    def __init__(self, command: str):
-        self.command = command
+    def __init__(self, settings: Settings | str):
+        # Accept the old string form for small integrations, while the application
+        # passes Settings so the upstream bridge can be configured explicitly.
+        if isinstance(settings, str):
+            self.settings: Settings | None = None
+            self.command = settings
+        else:
+            self.settings = settings
+            self.command = settings.minicpm_ocr_command
 
     def extract(self, path: Path, mime_type: str) -> list[OcrPageResult]:
         if not self.command:
             raise RuntimeError(
-                "MiniCPM-OCR is disabled: configure MINICPM_OCR_COMMAND for a local runner"
+                "MiniCPM-OCR is enabled but MINICPM_OCR_COMMAND is not configured"
             )
-        executable = Path(self.command.split()[0])
+        command = shlex.split(self.command)
+        if not command:
+            raise RuntimeError("MiniCPM-OCR command is empty")
+        executable = Path(command[0])
         if not executable.is_absolute():
             raise RuntimeError("MiniCPM-OCR command must be an absolute trusted local executable")
+        environment = os.environ.copy()
+        timeout = 300
+        if self.settings:
+            timeout = self.settings.minicpm_ocr_timeout_seconds
+            work_root = self.settings.minicpm_ocr_work_root
+            if not work_root.is_absolute():
+                work_root = (self.settings.storage_root / work_root).resolve()
+            environment.update(
+                {
+                    "MINICPM_OCR_PROJECT_ROOT": str(self.settings.minicpm_ocr_project_root),
+                    "MINICPM_OCR_CLI": self.settings.minicpm_ocr_cli,
+                    "MINICPM_OCR_SERVER_URL": self.settings.minicpm_ocr_server_url,
+                    "MINICPM_OCR_MODEL": self.settings.minicpm_ocr_model,
+                    "MINICPM_OCR_LAYOUT_DEVICE": self.settings.minicpm_ocr_layout_device,
+                    "MINICPM_OCR_WORK_ROOT": str(work_root),
+                }
+            )
+            if self.settings.minicpm_ocr_layout_model:
+                environment["MINICPM_OCR_LAYOUT_MODEL"] = str(
+                    self.settings.minicpm_ocr_layout_model
+                )
         completed = subprocess.run(
-            [*shlex.split(self.command), "--input", str(path), "--mime", mime_type],
+            [*command, "--input", str(path), "--mime", mime_type],
             check=True,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=timeout,
+            env=environment,
         )
-        payload = json.loads(completed.stdout)
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("MiniCPM-OCR runner returned invalid JSON") from exc
         pages: list[OcrPageResult] = []
+        if not isinstance(payload, dict) or not isinstance(payload.get("pages"), list):
+            raise RuntimeError("MiniCPM-OCR runner returned an invalid page payload")
+        if self.settings and len(payload["pages"]) > self.settings.max_pages:
+            raise ValueError("Document exceeds the configured page limit")
         for item in payload.get("pages", []):
+            if not isinstance(item, dict):
+                raise RuntimeError("MiniCPM-OCR runner returned an invalid page")
             words = [
                 OcrWord(word["text"], float(word.get("confidence", 0)), word["bbox"])
                 for word in item.get("words", [])

@@ -18,6 +18,11 @@ def restore_typed(
     """Restore only typed object fields with a matching opaque entity_id and pseudonym."""
     restored = dict(payload)
     issues: list[str] = []
+    safe_values = [
+        normalize_for_match(str(item.get("pseudonym", "")))
+        for item in mappings.values()
+        if item.get("pseudonym")
+    ]
     for field in ALLOWED_PERSONAL_FIELDS:
         value = payload.get(field)
         if not isinstance(value, dict):
@@ -32,6 +37,14 @@ def restore_typed(
             issues.append(f"{field}:pseudonym_mismatch")
             continue
         restored[field] = {**value, "value": mapping["original"]}
+    # A free-text answer is deliberately never rewritten. If it contains a safe
+    # pseudonym, automatic restore would be an unsafe global replacement.
+    for field, value in payload.items():
+        if field in ALLOWED_PERSONAL_FIELDS or not isinstance(value, str):
+            continue
+        normalized = normalize_for_match(value)
+        if any(safe and safe in normalized for safe in safe_values):
+            issues.append(f"{field}:untyped_pseudonym")
     if issues:
         return "RESTORE_REVIEW_REQUIRED", None, issues
     return "RESTORED", restored, []

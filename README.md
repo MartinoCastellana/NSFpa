@@ -48,6 +48,10 @@ NSFpa separa il patrimonio informativo dell’ente dal servizio di IA:
 - Reverse mapping tipizzato solo su campi JSON validati.
 - Tenant isolation applicativa e audit minimizzato.
 
+## MiniCPM-OCR integrato
+
+Il progetto integra il sistema locale [MiniCPM-OCR di OpenBMB](https://github.com/OpenBMB/MiniCPM-OCR) tramite il bridge `scripts/minicpm_ocr_runner.py`. L’engine estrae il contenuto di PDF e immagini nel perimetro locale; il testo OCR viene poi salvato nel database, analizzato e pseudonimizzato prima dell’invio alla Responses API.
+
 ## Avvio con Docker Compose
 
 Requisiti:
@@ -136,17 +140,14 @@ La configurazione è per tenant. Solo un utente con ruolo `admin` può modificar
 
 ### 2. Creare una richiesta
 
-Da **Nuova richiesta** oppure dal dashboard:
+Da **Nuova analisi**:
 
-1. creare lo scope;
-2. caricare PDF, PNG, JPEG o fixture `text/plain`;
-3. avviare **Estrai e prepara preflight**;
-4. attendere OCR, detector e NEC locali;
-5. controllare le evidenze rilevate;
-6. approvare le evidenze;
-7. controllare il testo pseudonimizzato nel preflight;
-8. eseguire la validazione;
-9. inviare solo se il gate mostra `READY`.
+1. inserire il nome della pratica, l’obiettivo e i campi da estrarre;
+2. caricare PDF, PNG, JPEG o fixture `text/plain` con drag-and-drop;
+3. avviare **Estrai OCR** e controllare il testo riconosciuto;
+4. premere **Pseudonimizza testo** per rilevare, salvare e sostituire le evidenze;
+5. controllare il testo autorizzato e premere **Invia a ChatGPT**;
+6. visualizzare la risposta JSON e, con ruolo autorizzato, richiedere il restore.
 
 Se una evidenza è ambigua, il documento è incompleto o resta un pattern sensibile, l’invio viene bloccato.
 
@@ -272,7 +273,12 @@ Le variabili sono documentate in `.env.example`.
 | `FAIL_CLOSED` | Blocca l’invio in caso di controlli non superati |
 | `RETENTION_DAYS` | TTL di documenti e richieste |
 | `MINICPM_OCR_ENABLED` | Attiva l’adapter MiniCPM locale |
-| `MINICPM_OCR_COMMAND` | Eseguibile locale trusted per MiniCPM-OCR |
+| `MINICPM_OCR_COMMAND` | Bridge locale trusted (`scripts/minicpm_ocr_runner.py`) |
+| `MINICPM_OCR_PROJECT_ROOT` | Root del progetto upstream MiniCPM-OCR |
+| `MINICPM_OCR_CLI` | CLI `minicpmvocr` nell’ambiente upstream |
+| `MINICPM_OCR_SERVER_URL` | Endpoint di inferenza MiniCPM, solo localhost |
+| `MINICPM_OCR_MODEL` | Nome del modello servito localmente |
+| `MINICPM_OCR_TIMEOUT_SECONDS` | Timeout dell’estrazione locale |
 
 ## PostgreSQL e migrazioni
 
@@ -293,7 +299,7 @@ Il container in sviluppo crea automaticamente le tabelle mancanti; in produzione
 
 ## MiniCPM-OCR locale
 
-La pipeline standard usa PyMuPDF/Tesseract. MiniCPM-OCR può essere collegato tramite un runner locale che restituisce:
+La pipeline standard usa PyMuPDF/Tesseract. MiniCPM-OCR può essere collegato tramite il bridge locale `scripts/minicpm_ocr_runner.py`, che invoca l’SDK upstream e restituisce:
 
 ```json
 {

@@ -402,7 +402,7 @@ async def extract_document(
     await session.flush()
     try:
         adapter = (
-            MiniCPMOcrAdapter(settings.minicpm_ocr_command)
+            MiniCPMOcrAdapter(settings)
             if settings.minicpm_ocr_enabled
             else LocalOcrAdapter(settings)
         )
@@ -847,10 +847,44 @@ async def validate(
     return ValidationOut(status=result.status, report=result.report)
 
 
+_ENTITY_FIELD = {
+    "anyOf": [
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "value": {"type": "string"},
+                "entity_id": {"type": "string"},
+            },
+            "required": ["value", "entity_id"],
+        },
+        {"type": "null"},
+    ]
+}
+
 SCHEMA = {
     "type": "object",
-    "additionalProperties": True,
-    "properties": {"document_text": {"type": "string"}},
+    "additionalProperties": False,
+    "properties": {
+        "answer": {"type": "string"},
+        "richiedente": _ENTITY_FIELD,
+        "luogo_nascita": _ENTITY_FIELD,
+        "data_nascita": _ENTITY_FIELD,
+        "indirizzo": _ENTITY_FIELD,
+        "email": _ENTITY_FIELD,
+        "telefono": _ENTITY_FIELD,
+        "tipo_documento": {"type": "string"},
+    },
+    "required": [
+        "answer",
+        "richiedente",
+        "luogo_nascita",
+        "data_nascita",
+        "indirizzo",
+        "email",
+        "telefono",
+        "tipo_documento",
+    ],
 }
 
 
@@ -879,6 +913,33 @@ async def send(
         ).all()
     )
     originals = [cipher.decrypt(item.encrypted_original) for item in evidences]
+    mapping_rows = list(
+        (
+            await session.scalars(
+                select(PseudonymMapping)
+                .where(PseudonymMapping.request_id == request.id)
+                .order_by(PseudonymMapping.created_at)
+            )
+        ).all()
+    )
+    safe_entities = [
+        {
+            "entity_id": str(item.entity_id),
+            "pseudonym": item.pseudonym,
+            "entity_type": item.entity_type,
+            "semantic_role": next(
+                (
+                    evidence.semantic_role
+                    for evidence in evidences
+                    if evidence.entity_type == item.entity_type
+                    and cipher.decrypt(evidence.encrypted_original)
+                    == cipher.decrypt(item.encrypted_original)
+                ),
+                "",
+            ),
+        }
+        for item in mapping_rows
+    ]
     provider_endpoint, provider_model, provider_mode, provider_api_key = await _provider_runtime(
         session, principal.tenant_id
     )
@@ -905,7 +966,18 @@ async def send(
             base_url=provider_endpoint,
             model=provider_model,
             mode=provider_mode,
-        ).complete(text, SCHEMA, originals)
+        ).complete(
+            text,
+            SCHEMA,
+            originals,
+            safe_entities,
+            task=str(request.policy.get("task", "")),
+            requested_fields=[
+                str(item).strip()
+                for item in request.policy.get("fields", [])
+                if str(item).strip()
+            ],
+        )
         api_call.openai_response_id = completion.response_id
         api_call.token_usage = completion.usage
         api_call.latency_ms = completion.latency_ms

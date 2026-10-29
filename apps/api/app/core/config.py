@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     minicpm_ocr_enabled: bool = False
     minicpm_ocr_command: str = ""
+    minicpm_ocr_project_root: Path = Path("")
+    minicpm_ocr_cli: str = "minicpmvocr"
+    minicpm_ocr_server_url: str = "http://127.0.0.1:18499"
+    minicpm_ocr_model: str = "minicpm-ocr"
+    minicpm_ocr_timeout_seconds: int = 900
+    minicpm_ocr_layout_device: str = "cpu"
+    minicpm_ocr_layout_model: Path | None = None
+    minicpm_ocr_work_root: Path = Path("minicpm-runs")
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
 

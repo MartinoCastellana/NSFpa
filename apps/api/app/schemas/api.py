@@ -19,6 +19,7 @@ class RequestOut(BaseModel):
     scope_id: UUID
     status: RequestStatus
     policy_version: str
+    policy: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
